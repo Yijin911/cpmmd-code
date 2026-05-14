@@ -1,0 +1,2 @@
+experiment,d,n,df,poly_degree,n_reps,C1_shared,C1_perperm,pct_delta_C1,sigma_med_shared,sigma_med_perperm,power_shared,power_perperm,typeI_shared,typeI_perperm
+polynomial_p4_d10,10,500,20,4,200,3.0804155766655493e-07,0.003080381161800784,-99.98999988827724,99.99988252509866,99.99987981477486,0.87,0.87,0.065,0.03

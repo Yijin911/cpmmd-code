@@ -1,0 +1,2 @@
+experiment,d,n,delta,n_reps,C1_shared,C1_perperm,pct_delta_C1,sigma_med_shared,sigma_med_perperm,power_shared,power_perperm,typeI_shared,typeI_perperm
+linear_multiscale_d2,2,200,0.3,100,0.007434645702445429,0.19634823825935133,-96.2135409167129,0.2539812975423169,0.2825340847432949,1.0,1.0,0.03,0.03
