@@ -174,7 +174,7 @@ def experiment_oracle_gap():
             label=r'Theoretical bound $2B_N(\delta)$')
     ax.set_xlabel(r'Sample size $n$')
     ax.set_ylabel(r'Gap / Bound')
-    ax.set_title('Oracle inequality validation (Theorem 3.3)')
+    ax.set_title('Squared-MMD concentration check')
     ax.legend()
     ax.set_xscale('log')
     ax.set_yscale('log')

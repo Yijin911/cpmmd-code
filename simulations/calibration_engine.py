@@ -143,7 +143,7 @@ def compute_G_at_model(X, Y, model, n_mc=200):
 
 
 def compute_G_bound(X, Y, model, sigma=None):
-    """
+    r"""
     Theoretical Gaussian complexity upper bound for an MLP.
     
     Reference: Bartlett et al. (2017), "Spectrally-normalized margin bounds for neural networks."

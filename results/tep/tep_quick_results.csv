@@ -1,0 +1,17 @@
+fault,method,metric,value,n_reps
+Normal,CPMMD1+PermSplit2,TYPE_I,0.08,50
+Normal,Liu1+PermSplit2,TYPE_I,0.08,50
+Normal,Plain1+PermSplit2,TYPE_I,0.1,50
+Normal,Median+Perm,TYPE_I,0.06,50
+Fault_3,CPMMD1+PermSplit2,POWER,1.0,50
+Fault_3,Liu1+PermSplit2,POWER,0.16,50
+Fault_3,Plain1+PermSplit2,POWER,0.24,50
+Fault_3,Median+Perm,POWER,1.0,50
+Fault_9,CPMMD1+PermSplit2,POWER,0.96,50
+Fault_9,Liu1+PermSplit2,POWER,0.06,50
+Fault_9,Plain1+PermSplit2,POWER,0.08,50
+Fault_9,Median+Perm,POWER,1.0,50
+Fault_15,CPMMD1+PermSplit2,POWER,0.14,50
+Fault_15,Liu1+PermSplit2,POWER,0.04,50
+Fault_15,Plain1+PermSplit2,POWER,0.08,50
+Fault_15,Median+Perm,POWER,0.28,50
