@@ -19,8 +19,15 @@ Camera-ready changes:
     the split, the calibration and the permutation test, so runs are reproducible
     and METHODS can be split across processes without changing the numbers.
   - MODES (default permsplit) selects the protocol; the paper uses permsplit.
+  - CPMMD-ard: per-feature bandwidths h(x) = (x_1/s_1, ..., x_d/s_d) with the
+    Gaussian kernel. h is a one-layer diagonal linear network, so the proxy is the
+    deep one, L(h) ||D||_F / N with L(h) = max_j 1/s_j. As for the deep ansatz (App. F.2),
+    C1 is the 95th percentile, over null permutations of the training half, of
+    mmd^2/G at the plain-MMD maximizer; selection maximizes J_CP. Both start from
+    the best bandwidth of the linear grid and follow Adam on the log scales,
+    keeping the best iterate.
 
-Usage: [MODES=permsplit] [METHODS=CPMMD-poly3] [OUT_SUFFIX=_poly3] python run_higgs_extra_gpu.py
+Usage: [MODES=permsplit] [METHODS=CPMMD-poly3] [SAMPLE_SIZES=200] [OUT_SUFFIX=_poly3] python run_higgs_extra_gpu.py
 """
 from __future__ import annotations
 import os
@@ -46,7 +53,9 @@ ALPHA = 0.05
 N_REPS = 50
 N_PERM = 200
 N_CAL = 30  # was 10
-SAMPLE_SIZES = [200, 500]
+SAMPLE_SIZES = [int(v) for v in os.environ.get('SAMPLE_SIZES', '200,500').split(',')]
+ARD_STEPS = 200   # Adam steps on the log bandwidths of CPMMD-ard
+ARD_LR = 0.05
 MAX_ROWS = 100000
 SEED = 42
 N_DIAG_REPS = 5  # log diagnostics for first 5 H1 reps per method
@@ -316,6 +325,101 @@ def run_poly(X_np, Y_np, sigma_grid, degree, mode='permsplit', diag_writer=None,
 
 
 # ----------------------------------------------------------------------
+# Per-feature bandwidths (ARD)
+# ----------------------------------------------------------------------
+def _ard_mmd2(Z, perms, m, log_a):
+    """Unbiased MMD^2 of exp(-||a * (x - y)||^2 / 2) for P labellings of the pooled sample Z.
+
+    perms: (P, N) indices whose first m entries form X; log_a: (P, d) log feature scales a = 1/s.
+    """
+    Zp = Z[perms] * log_a.exp()[:, None, :]
+    sq = (Zp * Zp).sum(-1)
+    K = torch.exp(-(sq[:, :, None] + sq[:, None, :] - 2 * Zp @ Zp.transpose(1, 2)).clamp_min(0.0) / 2)
+    n = Z.shape[0] - m
+    diag = K.diagonal(dim1=1, dim2=2)
+    sxx = K[:, :m, :m].sum((1, 2)) - diag[:, :m].sum(1)
+    syy = K[:, m:, m:].sum((1, 2)) - diag[:, m:].sum(1)
+    sxy = K[:, :m, m:].sum((1, 2))
+    return sxx / (m * (m - 1)) + syy / (n * (n - 1)) - 2 * sxy / (m * n)
+
+
+def _ard_ascent(objective, log_a0, steps=ARD_STEPS, lr=ARD_LR):
+    """Adam ascent of each row of objective(log_a); returns the best value and iterate per row."""
+    log_a = log_a0.clone().requires_grad_(True)
+    opt = torch.optim.Adam([log_a], lr=lr)
+    best_val = torch.full(log_a0.shape[:1], -float('inf'), device=log_a0.device)
+    best = log_a0.clone()
+    for t in range(steps + 1):
+        val = objective(log_a)
+        with torch.no_grad():
+            better = val > best_val
+            best_val = torch.where(better, val, best_val)
+            best[better] = log_a[better]
+        if t == steps:
+            break
+        opt.zero_grad()
+        (-val.sum()).backward()
+        opt.step()
+    return best_val, best
+
+
+def _ard_start(objective, sigma_grid, rows, d):
+    """Best isotropic log scale -log(s) on the linear grid, per row of objective."""
+    grid = torch.tensor([-np.log(s) for s in sigma_grid], device=DEVICE, dtype=DTYPE)
+    with torch.no_grad():
+        vals = torch.stack([objective(g.expand(rows, d)) for g in grid])
+    return grid[vals.argmax(0)][:, None].expand(rows, d).clone()
+
+
+def select_ard(X_tr, Y_tr, sigma_grid, rng):
+    """Calibrate C1 and select the log feature scales of CPMMD-ard on a training half.
+
+    Returns (C1, log_a, J_CP at log_a, plain MMD^2 at log_a).
+    """
+    half = X_tr.shape[0]
+    Z = torch.cat([X_tr, Y_tr], dim=0)
+    N, d = Z.shape
+    DF = torch.linalg.norm(Z)
+    G = lambda la: la.max(-1).values.exp() * DF / N                       # L(h) ||D||_F / N
+
+    perms = torch.tensor(np.stack([rng.permutation(N) for _ in range(N_CAL)]), device=DEVICE)
+    plain = lambda la: _ard_mmd2(Z, perms, half, la)              # plain-MMD maximizer per permutation
+    mmd2_plain, la_plain = _ard_ascent(plain, _ard_start(plain, sigma_grid, N_CAL, d))
+    with torch.no_grad():
+        ratios = (mmd2_plain / G(la_plain)).cpu().numpy()
+    C1 = float(np.quantile(np.maximum(ratios, 0.0), 0.95))
+
+    ident = torch.arange(N, device=DEVICE)[None, :]
+    J = lambda la: _ard_mmd2(Z, ident, half, la) - C1 * G(la)
+    J_sel, la_sel = _ard_ascent(J, _ard_start(J, sigma_grid, 1, d))
+    with torch.no_grad():
+        mmd2_sel = float(_ard_mmd2(Z, ident, half, la_sel)[0])
+    return C1, la_sel[0], float(J_sel[0]), mmd2_sel
+
+
+def run_ard(X_np, Y_np, sigma_grid, mode='permsplit', diag_writer=None,
+            method_label=None, hypothesis=None, rep=None, n_samples=None, rng=None):
+    """CP-MMD with per-feature bandwidths; permsplit only."""
+    assert mode == 'permsplit'
+    rng = rng if rng is not None else np.random.default_rng()
+    n = X_np.shape[0]
+    half = n // 2
+    perm_x, perm_y = rng.permutation(n), rng.permutation(n)
+    t = lambda a: torch.tensor(a, device=DEVICE, dtype=DTYPE)
+    X_tr, Y_tr = t(X_np[perm_x[:half]]), t(Y_np[perm_y[:half]])
+    X_te, Y_te = t(X_np[perm_x[half:]]), t(Y_np[perm_y[half:]])
+    C1, la_sel, J_sel, mmd2_sel = select_ard(X_tr, Y_tr, sigma_grid, rng)
+    a = la_sel.exp()
+    if diag_writer is not None and rep is not None and rep < N_DIAG_REPS:
+        diag_writer.writerow([method_label, hypothesis, n_samples, rep, mode, C1,
+                              float((-la_sel).mean().exp()), J_sel, mmd2_sel, 0])
+        top = torch.argsort(a, descending=True)[:5].tolist()
+        log(f'    {method_label} {hypothesis} rep {rep}: C1={C1:.4f}, '
+            f'largest scales a_j at features {top}: {[round(float(a[j]), 3) for j in top]}')
+    return perm_test_torch(X_te * a, Y_te * a, gaussian_kernel_torch, 1.0, rng=rng)
+
+
+# ----------------------------------------------------------------------
 # Main
 # ----------------------------------------------------------------------
 def main():
@@ -357,6 +461,8 @@ def main():
             X, Y, sigma_poly, 3, 'permsplit', dw, 'CPMMD-poly3', hyp, r, n, g)),
         ('CPMMD-poly3', 'fullsample', lambda X, Y, dw, hyp, r, n, g: run_poly(
             X, Y, sigma_poly, 3, 'fullsample', dw, 'CPMMD-poly3', hyp, r, n, g)),
+        ('CPMMD-ard', 'permsplit', lambda X, Y, dw, hyp, r, n, g: run_ard(
+            X, Y, sigma_lin, 'permsplit', dw, 'CPMMD-ard', hyp, r, n, g)),
     ]
 
     for n in SAMPLE_SIZES:

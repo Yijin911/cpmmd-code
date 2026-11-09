@@ -10,7 +10,12 @@ squared-distance matrix is computed once and shared by all bandwidths and
 permutations; at each bandwidth, the statistics of the observed split and of the
 N_CAL permutations come from one matrix product.
 
-Selection runs in NumPy on one CPU thread. The per-test cost reuses the JAX test
+CP-MMD-ard (per-feature bandwidths) calibrates and selects with
+run_higgs_extra_gpu.select_ard: Adam ascent on the log feature scales, N_CAL null
+permutations for the plain-MMD maximizers and one J_CP ascent, ARD_STEPS steps each,
+in PyTorch. Its deployed test is the linear one applied to the rescaled features.
+
+Selection runs on one CPU thread. The per-test cost reuses the JAX test
 of run_deployment_cost.py, with JIT compilation excluded as in Fig. 3(b).
 K* = T_sel / (T_baseline - T_test) is the number of tests after which the
 cumulative cost of CP-MMD falls below that of a baseline; the baseline and
@@ -23,13 +28,20 @@ import os
 
 for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
     os.environ.setdefault(_v, '1')
+os.environ['CUDA_VISIBLE_DEVICES'] = ''          # CPU timing, as in Fig. 3(b)
 
 import csv  # noqa: E402
 import time  # noqa: E402
 
 import numpy as np  # noqa: E402
 
+import torch  # noqa: E402
+
 import run_deployment_cost as rdc  # noqa: E402
+import run_higgs_extra_gpu as rx  # noqa: E402
+
+torch.set_num_threads(1)
+ARD_GRID = list(np.geomspace(2.0, 20.0, 24))     # start grid of CPMMD-ard (sigma_lin)
 
 N_CAL = 30
 N_GRID = 24
@@ -73,6 +85,13 @@ def select(kind, X, Y, seed):
     return C1, float(sigmas[j]), j in (0, N_GRID - 1)
 
 
+def select_ard(X, Y, seed):
+    """Calibrate C1_hat and select the feature scales of CPMMD-ard; returns (C1_hat, scales)."""
+    t = lambda a: torch.tensor(a, dtype=torch.float32)
+    C1, log_a, _, _ = rx.select_ard(t(X), t(Y), ARD_GRID, np.random.default_rng(seed))
+    return C1, log_a.exp().numpy()
+
+
 def per_test_times(model, test_pairs):
     model.per_test(*test_pairs[0], seed=-1)          # JIT warm-up
     times = []
@@ -91,20 +110,30 @@ def main():
     t_cost = {(r['method'], int(r['B'])): float(r['per_test_median_s']) for r in cost}
 
     rows = []
-    for kind in ('linear', 'poly3'):
-        select(kind, X, Y, seed=99)                  # warm-up
+    for kind in ('linear', 'poly3', 'ard'):
+        run = (lambda r: select_ard(X, Y, seed=r)) if kind == 'ard' else (lambda r: select(kind, X, Y, seed=r))
+        run(99)                                      # warm-up
         sel, out = [], None
         for r in range(N_REPEATS):
             t0 = time.perf_counter()
-            out = select(kind, X, Y, seed=r)
+            out = run(r)
             sel.append(time.perf_counter() - t0)
         t_sel = float(np.median(sel))
-        C1, sigma, boundary = out
-        model = (rdc.CPMMDDeployedKernel(sigma) if kind == 'linear'
-                 else rdc.CPMMDPolyDeployed(sigma, 3))
-        t_test_here = per_test_times(model, test_pairs)
-        t_test = t_cost[(f'CP-MMD-{kind}', 1)]
-        row = {'method': f'CP-MMD-{kind}', 'n_cal': N_CAL, 'grid_points': N_GRID,
+        if kind == 'ard':                            # linear test on the rescaled features
+            C1, scales = out
+            sigma, boundary = float(np.exp(-np.log(scales).mean())), False
+            model = rdc.CPMMDDeployedKernel(np.sqrt(2.0))
+            pairs = [(Xt * scales, Yt * scales) for Xt, Yt in test_pairs]
+            t_test = t_cost[('CP-MMD-linear', 1)]
+        else:
+            C1, sigma, boundary = out
+            model = (rdc.CPMMDDeployedKernel(sigma) if kind == 'linear'
+                     else rdc.CPMMDPolyDeployed(sigma, 3))
+            pairs = test_pairs
+            t_test = t_cost[(f'CP-MMD-{kind}', 1)]
+        t_test_here = per_test_times(model, pairs)
+        row = {'method': f'CP-MMD-{kind}', 'n_cal': N_CAL,
+               'grid_points': N_GRID if kind != 'ard' else f'{len(ARD_GRID)} + {rx.ARD_STEPS} Adam steps',
                'selection_ms': round(1000 * t_sel, 1),
                'per_test_ms': round(1000 * t_test, 1),
                'per_test_ms_this_run': round(1000 * t_test_here, 1),

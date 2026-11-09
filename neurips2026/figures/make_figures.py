@@ -493,6 +493,7 @@ def fig_higgs_deployment():
     # Unified colours: methods in BOTH panels share colour; panel-unique methods get their own.
     color = {
         'CPMMD-linear': '#9ECAE1',
+        'CPMMD-ard':    '#17BECF',
         'CPMMD-poly2':  '#6BAED6',
         'CPMMD-poly3':  '#377EB8',
         'CPMMD-deep':   '#08519C',
@@ -504,6 +505,7 @@ def fig_higgs_deployment():
     }
     label = {
         'CPMMD-linear': 'CP-MMD linear',
+        'CPMMD-ard':    'CP-MMD ARD',
         'CPMMD-poly2':  'CP-MMD poly2',
         'CPMMD-poly3':  'CP-MMD poly3',
         'CPMMD-deep':   'CP-MMD deep',
@@ -519,10 +521,11 @@ def fig_higgs_deployment():
 
     # ---- Panel (a): Higgs bar chart ----
     ax = axs[0]
-    higgs_methods = ['CPMMD-linear', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
+    higgs_methods = ['CPMMD-linear', 'CPMMD-ard', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
                      'Liu', 'Plain', 'Median', 'MMDAgg']
     csv_key = {
         'CPMMD-linear': 'CPMMD-linear',
+        'CPMMD-ard': 'CPMMD-ard',
         'CPMMD-poly2': 'CPMMD-poly2',
         'CPMMD-poly3': 'CPMMD-poly3',
         'CPMMD-deep': 'CPMMD1+PermSplit2',
@@ -585,7 +588,7 @@ def fig_higgs_deployment():
         spine.set_visible(False)
 
     # ---- Shared legend at bottom (union of methods) ----
-    legend_order = ['CPMMD-linear', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
+    legend_order = ['CPMMD-linear', 'CPMMD-ard', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
                     'Liu', 'Plain', 'Median', 'MMDAgg', 'MMD-FUSE']
     handles = []
     for m in legend_order:
