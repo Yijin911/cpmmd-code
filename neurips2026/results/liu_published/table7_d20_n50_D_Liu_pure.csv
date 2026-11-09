@@ -1,0 +1,4 @@
+experiment,dim,n_samples,delta,method,rejection_rate,n_valid,n_reps,time_s
+d20_n50,20,50,0.0,D_Liu_pure,0.07,100,100,53.06317210197449
+d20_n50,20,50,0.5,D_Liu_pure,0.09,100,100,49.46655750274658
+d20_n50,20,50,1.0,D_Liu_pure,0.27,100,100,46.43406629562378

@@ -1,0 +1,3 @@
+experiment,n_samples,method,metric,value,n_reps
+H1_Higgs,200,Liu1+PermSplit2,power,0.12,50
+H0_Higgs,200,Liu1+PermSplit2,type_I,0.08,50

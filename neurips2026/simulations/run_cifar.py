@@ -19,7 +19,8 @@ Methods compared:
     MMDAgg:   kernel aggregation + permutation test
     MMD-FUSE: kernel fusion + permutation test
 
-Features: PCA-reduced to 50 dimensions from raw pixels (3072-dim).
+Features: PCA-reduced to 500 dimensions from raw pixels (3072-dim).
+The defaults below are the setting of App. K: n = 200, 50 reps.
 """
 
 import os, sys, time, csv, warnings
@@ -28,13 +29,13 @@ import torch
 import torch.nn as nn
 import pickle
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mmd_core import (
     compute_mmd_u_statistic, optimize_bandwidth,
     DeepDiscriminator, mmd_loss_torch, _to_tensor,
-    _sq_euclidean_distances, _DEVICE, BestIterate
+    _sq_euclidean_distances, _DEVICE, BestIterate, liu_tau_hat
 )
 from calibration_engine import compute_S
 
@@ -45,16 +46,16 @@ import jax.random
 
 warnings.filterwarnings('ignore')
 
-RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'results', 'cifar')
+RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'results', 'cifar_pca500')
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 DATA_DIR = os.path.expanduser('~/data')
 
 ALPHA = 0.05
-N_REPS = 200         # repetitions per setting
+N_REPS = 50          # repetitions per setting
 N_PERM = 200         # permutations for threshold
-PCA_DIM = 50         # PCA dimensionality reduction
-SAMPLE_SIZES = [200, 500]
+PCA_DIM = 500        # PCA dimensionality reduction
+SAMPLE_SIZES = [200]
 
 # Deep kernel hyperparameters (matching kernel_criterion.tex)
 FEATURE_DIM = 10
@@ -196,10 +197,9 @@ def step1_liu(X, Y, dim):
         mmd2 = mmd_loss_torch(f_x, f_y, sigma)
         m = f_x.shape[0]
         K_xx = torch.exp(-_sq_euclidean_distances(f_x, f_x) / (sigma**2))
+        K_yy = torch.exp(-_sq_euclidean_distances(f_y, f_y) / (sigma**2))
         K_xy = torch.exp(-_sq_euclidean_distances(f_x, f_y) / (sigma**2))
-        h_x = K_xx.mean(dim=1) - K_xy.mean(dim=1)
-        var_h = torch.var(h_x).clamp(min=1e-10)
-        sigma_hat = torch.sqrt(4 * var_h / m)
+        sigma_hat = liu_tau_hat(K_xx, K_yy, K_xy) / np.sqrt(m)
         J = mmd2 / sigma_hat
         (-J).backward()
         nn.utils.clip_grad_norm_(params, 5.0)

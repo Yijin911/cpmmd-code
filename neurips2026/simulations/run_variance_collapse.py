@@ -16,12 +16,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mmd_core import (
     DeepDiscriminator, mmd_loss_torch,
-    _to_tensor, _sq_euclidean_distances, _DEVICE,
+    _to_tensor, _sq_euclidean_distances, _DEVICE, liu_tau_hat,
 )
 
 warnings.filterwarnings('ignore')
@@ -72,10 +72,9 @@ def train_liu(X, Y, hidden_width):
 
         m = f_x.shape[0]
         K_xx = torch.exp(-_sq_euclidean_distances(f_x, f_x) / (sigma**2))
+        K_yy = torch.exp(-_sq_euclidean_distances(f_y, f_y) / (sigma**2))
         K_xy = torch.exp(-_sq_euclidean_distances(f_x, f_y) / (sigma**2))
-        h_x = K_xx.mean(dim=1) - K_xy.mean(dim=1)
-        var_h = torch.var(h_x).clamp(min=1e-10)
-        tau_h = torch.sqrt(4 * var_h / m)
+        tau_h = liu_tau_hat(K_xx, K_yy, K_xy) / np.sqrt(m)
         j_liu = mmd2 / tau_h
 
         spec_prod = torch.tensor(1.0, device=_DEVICE)

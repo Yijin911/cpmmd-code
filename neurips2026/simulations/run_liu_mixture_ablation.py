@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mmd_core import (
     DeepDiscriminator, mmd_loss_torch,
-    _to_tensor, _sq_euclidean_distances, _DEVICE, BestIterate,
+    _to_tensor, _sq_euclidean_distances, _DEVICE, BestIterate, liu_tau_hat,
 )
 from calibration_engine import compute_S
 from data_generator import generate_data
@@ -180,14 +180,15 @@ def step1_liu_mixture(X, Y, dim):
 
     def crit(mmd2, D, eps, sigma_k, sigma_q, X_t, Y_t, f_x, f_y):
         K_xx_feat = _gaussian_gram_torch(f_x, f_x, sigma_k)
+        K_yy_feat = _gaussian_gram_torch(f_y, f_y, sigma_k)
         K_xy_feat = _gaussian_gram_torch(f_x, f_y, sigma_k)
         Q_xx = _gaussian_gram_torch(X_t, X_t, sigma_q)
+        Q_yy = _gaussian_gram_torch(Y_t, Y_t, sigma_q)
         Q_xy = _gaussian_gram_torch(X_t, Y_t, sigma_q)
         K_xx = (1 - eps) * K_xx_feat * Q_xx + eps * Q_xx
+        K_yy = (1 - eps) * K_yy_feat * Q_yy + eps * Q_yy
         K_xy = (1 - eps) * K_xy_feat * Q_xy + eps * Q_xy
-        h_x = K_xx.mean(dim=1) - K_xy.mean(dim=1)
-        var_h = torch.var(h_x).clamp(min=1e-10)
-        sigma_hat = torch.sqrt(4 * var_h / m)
+        sigma_hat = liu_tau_hat(K_xx, K_yy, K_xy) / np.sqrt(m)
         return mmd2 / sigma_hat
     return _train_mixture(X, Y, dim, crit)
 

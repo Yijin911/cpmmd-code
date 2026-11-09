@@ -197,6 +197,23 @@ def mmd_loss_torch(f_x, f_y, sigma):
     return xx + yy - 2 * xy
 
 
+LIU_LAMBDA = 1e-8  # regularizer Liu et al. add to the variance estimate
+
+
+def liu_tau_hat(K_xx, K_yy, K_xy, lam=LIU_LAMBDA):
+    """Liu et al. (2020) estimate tau_hat of the H1 standard deviation, for m = n.
+
+    With H = K_xx + K_yy - K_xy - K_yx and row means r_i = mean_j H_ij,
+    tau_hat^2 = 4 * (mean_i r_i^2 - (mean_i r_i)^2) + lam, as in
+    h1_mean_var_gram and the training loop of the authors' code
+    (github.com/fengliu90/DK-for-TST). Liu's ratio criterion is
+    J_Liu = sqrt(n) * MMD^2 / tau_hat.
+    """
+    H = K_xx + K_yy - K_xy - K_xy.t()
+    r = H.mean(dim=1)
+    return torch.sqrt(4.0 * (r - r.mean()).pow(2).mean() + lam)
+
+
 def train_discriminator(X, Y, hidden_width, sigma, x_dim, feature_dim,
                         lr=0.005, weight_decay=0.0, n_steps=150,
                         grad_clip=5.0, n_restarts=3, learn_sigma=True):

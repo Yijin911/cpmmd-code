@@ -20,12 +20,12 @@ import torch
 import torch.nn as nn
 from datetime import datetime
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mmd_core import (
     compute_mmd_u_statistic, DeepDiscriminator, mmd_loss_torch,
-    _to_tensor, _DEVICE, BestIterate
+    _to_tensor, _DEVICE, BestIterate, liu_tau_hat
 )
 
 warnings.filterwarnings('ignore')
@@ -90,9 +90,7 @@ def train_disc(X, Y, d, width, criterion, C1=0.0, seed=None):
             K_xx = torch.exp(-torch.cdist(f_x, f_x) ** 2 / (sigma ** 2 + 1e-8))
             K_yy = torch.exp(-torch.cdist(f_y, f_y) ** 2 / (sigma ** 2 + 1e-8))
             K_xy = torch.exp(-torch.cdist(f_x, f_y) ** 2 / (sigma ** 2 + 1e-8))
-            H = K_xx + K_yy - K_xy - K_xy.t()
-            tau2 = H.mean(dim=1).var() + 1e-8
-            loss = -(mmd2 / torch.sqrt(tau2))
+            loss = -(np.sqrt(n_) * mmd2 / liu_tau_hat(K_xx, K_yy, K_xy))
         else:
             loss = -mmd2
         if step == N_STEPS:

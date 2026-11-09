@@ -1,0 +1,4 @@
+experiment,dim,n_samples,delta,method,rejection_rate,n_valid,n_reps,time_s
+d50_n100,50,100,0.0,C_Liu_mix,0.04,100,100,144.23490071296692
+d50_n100,50,100,0.5,C_Liu_mix,0.02,100,100,145.74609661102295
+d50_n100,50,100,1.0,C_Liu_mix,0.06,100,100,146.5988323688507

@@ -22,7 +22,7 @@ import os, sys, time, csv, warnings
 import numpy as np
 from datetime import datetime
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mmd_core import compute_mmd_u_statistic, optimize_bandwidth, _DEVICE

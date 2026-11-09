@@ -28,13 +28,13 @@ import torch
 import torch.nn as nn
 import urllib.request
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mmd_core import (
     compute_mmd_u_statistic, optimize_bandwidth,
     DeepDiscriminator, mmd_loss_torch, _to_tensor,
-    _sq_euclidean_distances, _DEVICE, BestIterate
+    _sq_euclidean_distances, _DEVICE, BestIterate, liu_tau_hat
 )
 from calibration_engine import compute_S
 
@@ -227,10 +227,9 @@ def step1_liu(X, Y, dim):
         mmd2 = mmd_loss_torch(f_x, f_y, sigma)
         m = f_x.shape[0]
         K_xx = torch.exp(-_sq_euclidean_distances(f_x, f_x) / (sigma**2))
+        K_yy = torch.exp(-_sq_euclidean_distances(f_y, f_y) / (sigma**2))
         K_xy = torch.exp(-_sq_euclidean_distances(f_x, f_y) / (sigma**2))
-        h_x = K_xx.mean(dim=1) - K_xy.mean(dim=1)
-        var_h = torch.var(h_x).clamp(min=1e-10)
-        sigma_hat = torch.sqrt(4 * var_h / m)
+        sigma_hat = liu_tau_hat(K_xx, K_yy, K_xy) / np.sqrt(m)
         J = mmd2 / sigma_hat
         (-J).backward()
         nn.utils.clip_grad_norm_(params, 5.0)
@@ -323,40 +322,17 @@ def calibrate_C1(dim, X_null, Y_null, n_reps=10):
 
 
 # ======================================================================
-# MMDAgg fallback (bandwidth aggregation with Bonferroni)
+# MMDAgg (Schrab et al., 2023)
 # ======================================================================
-def mmdagg_perm_test(X, Y, n_perm=N_PERM):
-    """MMDAgg-style bandwidth aggregation with permutation test.
+def mmdagg_perm_test(X, Y):
+    """MMDAgg with its Laplacian-plus-Gaussian collection of 2 x 10 kernels.
 
-    Tries to import mmdagg; falls back to Bonferroni aggregation.
+    Needs the mmdagg package pinned in requirements.txt; an earlier version of
+    this function silently fell back to a Bonferroni test when it was missing.
     """
-    try:
-        from mmdagg import mmdagg as mmdagg_fn
-        result = mmdagg_fn(
-            X, Y, alpha=ALPHA,
-            kernel='laplace_gaussian',
-            number_bandwidths=10,
-            permutations_same_sample_size=True,
-        )
-        return int(result)
-    except ImportError:
-        # Fallback: Bonferroni-corrected bandwidth aggregation
-        sigmas = np.logspace(-1, 1, 10)
-        m, n = len(X), len(Y)
-        pooled = np.concatenate([X, Y], axis=0)
-        N = m + n
-        p_values = []
-        for sigma in sigmas:
-            mmd_obs = compute_mmd_u_statistic(X, Y, 'gaussian', sigma=sigma)
-            null_mmds = []
-            for _ in range(n_perm):
-                perm = np.random.permutation(N)
-                null_mmds.append(compute_mmd_u_statistic(
-                    pooled[perm[:m]], pooled[perm[m:]], 'gaussian', sigma=sigma))
-            p_val = np.mean(np.array(null_mmds) >= mmd_obs)
-            p_values.append(p_val)
-        min_p = min(p_values) * len(sigmas)  # Bonferroni
-        return int(min_p < ALPHA)
+    from mmdagg import mmdagg as mmdagg_fn
+    return int(mmdagg_fn(X, Y, alpha=ALPHA, kernel='laplace_gaussian',
+                         number_bandwidths=10, permutations_same_sample_size=True))
 
 
 # ======================================================================

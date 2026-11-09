@@ -11,3 +11,7 @@ H0_Higgs,500,CPMMD-poly2,permsplit,type_I,0.06,50
 H1_Higgs,500,CPMMD-poly2,permsplit,power,0.88,50
 H0_Higgs,500,CPMMD-poly3,permsplit,type_I,0.04,50
 H1_Higgs,500,CPMMD-poly3,permsplit,power,0.8,50
+H0_Higgs,200,CPMMD-ard,permsplit,type_I,0.02,50
+H1_Higgs,200,CPMMD-ard,permsplit,power,0.46,50
+H0_Higgs,500,CPMMD-ard,permsplit,type_I,0.0,50
+H1_Higgs,500,CPMMD-ard,permsplit,power,1.0,50

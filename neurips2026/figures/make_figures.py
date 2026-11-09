@@ -493,6 +493,7 @@ def fig_higgs_deployment():
     # Unified colours: methods in BOTH panels share colour; panel-unique methods get their own.
     color = {
         'CPMMD-linear': '#9ECAE1',
+        'CPMMD-ard':    '#17BECF',
         'CPMMD-poly2':  '#6BAED6',
         'CPMMD-poly3':  '#377EB8',
         'CPMMD-deep':   '#08519C',
@@ -504,6 +505,7 @@ def fig_higgs_deployment():
     }
     label = {
         'CPMMD-linear': 'CP-MMD linear',
+        'CPMMD-ard':    'CP-MMD ARD',
         'CPMMD-poly2':  'CP-MMD poly2',
         'CPMMD-poly3':  'CP-MMD poly3',
         'CPMMD-deep':   'CP-MMD deep',
@@ -519,10 +521,11 @@ def fig_higgs_deployment():
 
     # ---- Panel (a): Higgs bar chart ----
     ax = axs[0]
-    higgs_methods = ['CPMMD-linear', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
+    higgs_methods = ['CPMMD-linear', 'CPMMD-ard', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
                      'Liu', 'Plain', 'Median', 'MMDAgg']
     csv_key = {
         'CPMMD-linear': 'CPMMD-linear',
+        'CPMMD-ard': 'CPMMD-ard',
         'CPMMD-poly2': 'CPMMD-poly2',
         'CPMMD-poly3': 'CPMMD-poly3',
         'CPMMD-deep': 'CPMMD1+PermSplit2',
@@ -563,6 +566,13 @@ def fig_higgs_deployment():
         cp_lin_ms, color=color['CPMMD-linear'], linewidth=1.8, linestyle='-')
     panel_b_handles['CPMMD-poly3'] = ax.axhline(
         cp_p3_ms, color=color['CPMMD-poly3'], linewidth=1.8, linestyle='-')
+    # ARD runs the linear test on rescaled features; its per-test time is measured
+    # with the same JAX test by run_selection_cost.py.
+    sel_path = os.path.join(PROJECT_ROOT, 'results', 'deployment_cost', 'selection_cost.csv')
+    cp_ard_ms = next(float(r['per_test_ms_this_run']) for r in csv.DictReader(open(sel_path))
+                     if r['method'] == 'CP-MMD-ard')
+    panel_b_handles['CPMMD-ard'] = ax.axhline(
+        cp_ard_ms, color=color['CPMMD-ard'], linewidth=1.8, linestyle=(0, (3, 2)))
     h_agg, = ax.plot(by_method['MMDAgg']['B'], by_method['MMDAgg']['ms'],
                      's--', color=color['MMDAgg'], linewidth=1.5, markersize=5)
     h_fuse, = ax.plot(by_method['MMD-FUSE']['B'], by_method['MMD-FUSE']['ms'],
@@ -577,7 +587,7 @@ def fig_higgs_deployment():
     ax.set_ylabel('Wall-clock (ms)', fontsize=8)
     ax.tick_params(axis='both', labelsize=7)
     all_ms = list(by_method['MMDAgg']['ms']) + list(by_method['MMD-FUSE']['ms']) + \
-             [cp_lin_ms, cp_p3_ms]
+             [cp_lin_ms, cp_p3_ms, cp_ard_ms]
     ax.set_ylim(min(all_ms) * 0.5, max(all_ms) * 1.5)
     ax.grid(True, alpha=0.3, linestyle='--', which='both')
     ax.set_title('(b) Deployment cost', fontsize=9)
@@ -585,7 +595,7 @@ def fig_higgs_deployment():
         spine.set_visible(False)
 
     # ---- Shared legend at bottom (union of methods) ----
-    legend_order = ['CPMMD-linear', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
+    legend_order = ['CPMMD-linear', 'CPMMD-ard', 'CPMMD-poly2', 'CPMMD-poly3', 'CPMMD-deep',
                     'Liu', 'Plain', 'Median', 'MMDAgg', 'MMD-FUSE']
     handles = []
     for m in legend_order:
