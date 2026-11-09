@@ -566,6 +566,13 @@ def fig_higgs_deployment():
         cp_lin_ms, color=color['CPMMD-linear'], linewidth=1.8, linestyle='-')
     panel_b_handles['CPMMD-poly3'] = ax.axhline(
         cp_p3_ms, color=color['CPMMD-poly3'], linewidth=1.8, linestyle='-')
+    # ARD runs the linear test on rescaled features; its per-test time is measured
+    # with the same JAX test by run_selection_cost.py.
+    sel_path = os.path.join(PROJECT_ROOT, 'results', 'deployment_cost', 'selection_cost.csv')
+    cp_ard_ms = next(float(r['per_test_ms_this_run']) for r in csv.DictReader(open(sel_path))
+                     if r['method'] == 'CP-MMD-ard')
+    panel_b_handles['CPMMD-ard'] = ax.axhline(
+        cp_ard_ms, color=color['CPMMD-ard'], linewidth=1.8, linestyle=(0, (3, 2)))
     h_agg, = ax.plot(by_method['MMDAgg']['B'], by_method['MMDAgg']['ms'],
                      's--', color=color['MMDAgg'], linewidth=1.5, markersize=5)
     h_fuse, = ax.plot(by_method['MMD-FUSE']['B'], by_method['MMD-FUSE']['ms'],
@@ -580,7 +587,7 @@ def fig_higgs_deployment():
     ax.set_ylabel('Wall-clock (ms)', fontsize=8)
     ax.tick_params(axis='both', labelsize=7)
     all_ms = list(by_method['MMDAgg']['ms']) + list(by_method['MMD-FUSE']['ms']) + \
-             [cp_lin_ms, cp_p3_ms]
+             [cp_lin_ms, cp_p3_ms, cp_ard_ms]
     ax.set_ylim(min(all_ms) * 0.5, max(all_ms) * 1.5)
     ax.grid(True, alpha=0.3, linestyle='--', which='both')
     ax.set_title('(b) Deployment cost', fontsize=9)
