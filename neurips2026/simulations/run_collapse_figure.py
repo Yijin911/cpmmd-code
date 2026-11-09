@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mmd_core import (
     DeepDiscriminator, mmd_loss_torch,
-    _to_tensor, _sq_euclidean_distances, _DEVICE
+    _to_tensor, _sq_euclidean_distances, _DEVICE, liu_tau_hat
 )
 
 warnings.filterwarnings('ignore')
@@ -71,10 +71,9 @@ def train_and_log(X, Y, criterion='liu', C1=0.001):
         # Compute J_Liu components
         m = f_x.shape[0]
         K_xx = torch.exp(-_sq_euclidean_distances(f_x, f_x) / (sigma**2))
+        K_yy = torch.exp(-_sq_euclidean_distances(f_y, f_y) / (sigma**2))
         K_xy = torch.exp(-_sq_euclidean_distances(f_x, f_y) / (sigma**2))
-        h_x = K_xx.mean(dim=1) - K_xy.mean(dim=1)
-        var_h = torch.var(h_x).clamp(min=1e-10)
-        sigma_hat = torch.sqrt(4 * var_h / m)
+        sigma_hat = liu_tau_hat(K_xx, K_yy, K_xy) / np.sqrt(m)
         j_liu = (mmd2 / sigma_hat).item()
 
         # Compute G_spectral and Pi for J_CP
@@ -158,7 +157,7 @@ def main():
     # Formatting
     axes[0].set_xlabel('Training step')
     axes[0].set_ylabel(r'$J_{\mathrm{Liu}}$')
-    axes[0].set_title(r'(a) $J_{\mathrm{Liu}}$ diverges under $H_0$')
+    axes[0].set_title(r'(a) $J_{\mathrm{Liu}}$ grows under $H_0$')
     axes[0].axhline(y=0, color='k', linestyle='--', alpha=0.3)
     axes[0].legend(loc='upper left', fontsize=8)
     axes[0].set_yscale('symlog', linthresh=10)

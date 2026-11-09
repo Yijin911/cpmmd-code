@@ -29,13 +29,13 @@ import torch.nn as nn
 from datetime import datetime
 from copy import deepcopy
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mmd_core import (
     compute_mmd_u_statistic, optimize_bandwidth,
     DeepDiscriminator, mmd_loss_torch, train_discriminator,
-    _to_tensor, _sq_euclidean_distances, _DEVICE, BestIterate
+    _to_tensor, _sq_euclidean_distances, _DEVICE, BestIterate, liu_tau_hat
 )
 from calibration_engine import compute_S
 from data_generator import generate_data
@@ -164,12 +164,8 @@ def step1_liu(X, Y, dim, mode='deep'):
             Z = np.concatenate([X, Y], axis=0)
             Z_t = _to_tensor(Z)
             K = torch.exp(-_sq_euclidean_distances(Z_t, Z_t) / (sigma**2))
-            # Simple variance estimate
-            h_vals = []
-            for i in range(min(m, 50)):
-                h_vals.append(K[i, :m].mean().item() - K[i, m:].mean().item())
-            var_h = np.var(h_vals) + 1e-10
-            J = mmd_val / np.sqrt(var_h / m)
+            tau = liu_tau_hat(K[:m, :m], K[m:, m:], K[:m, m:]).item()
+            J = mmd_val / (tau / np.sqrt(m))
             if J > best_J:
                 best_J = J
                 best_sigma = sigma
@@ -187,13 +183,12 @@ def step1_liu(X, Y, dim, mode='deep'):
             sigma = log_sigma.exp()
             f_x, f_y = D(X_t), D(Y_t)
             mmd2 = mmd_loss_torch(f_x, f_y, sigma)
-            # Variance estimate
+            # Liu et al.'s H1 variance estimate
             m = f_x.shape[0]
             K_xx = torch.exp(-_sq_euclidean_distances(f_x, f_x) / (sigma**2))
+            K_yy = torch.exp(-_sq_euclidean_distances(f_y, f_y) / (sigma**2))
             K_xy = torch.exp(-_sq_euclidean_distances(f_x, f_y) / (sigma**2))
-            h_x = K_xx.mean(dim=1) - K_xy.mean(dim=1)
-            var_h = torch.var(h_x).clamp(min=1e-10)
-            sigma_hat = torch.sqrt(4 * var_h / m)
+            sigma_hat = liu_tau_hat(K_xx, K_yy, K_xy) / np.sqrt(m)
             J = mmd2 / sigma_hat
             (-J).backward()
             nn.utils.clip_grad_norm_(params, 5.0)
@@ -244,31 +239,9 @@ def step1_median(X, Y, dim):
 
 def step1_mmdagg(X, Y, dim):
     """MMDAgg bandwidth aggregation. Returns the test decision directly."""
-    try:
-        from mmdagg import mmdagg as mmdagg_fn
-        result = mmdagg_fn(X, Y, alpha=ALPHA, return_dictionary=True)
-        return {'decision': result, 'mode': 'aggregation'}
-    except ImportError:
-        # Fallback: implement simple bandwidth aggregation
-        sigmas = np.logspace(-1, 1, 10)
-        m, n = len(X), len(Y)
-        pooled = np.concatenate([X, Y], axis=0)
-        N = m + n
-        # For each sigma, compute MMD and permutation p-value
-        p_values = []
-        for sigma in sigmas:
-            mmd_obs = compute_mmd_u_statistic(X, Y, 'gaussian', sigma=sigma)
-            null_mmds = []
-            for _ in range(N_PERM):
-                perm = np.random.permutation(N)
-                null_mmds.append(compute_mmd_u_statistic(
-                    pooled[perm[:m]], pooled[perm[m:]], 'gaussian', sigma=sigma))
-            p_val = np.mean(np.array(null_mmds) >= mmd_obs)
-            p_values.append(p_val)
-        # Bonferroni correction
-        min_p = min(p_values) * len(sigmas)
-        reject = min_p < ALPHA
-        return {'decision': int(reject), 'p_value': min_p, 'mode': 'aggregation'}
+    from mmdagg import mmdagg as mmdagg_fn   # pinned in requirements.txt; no fallback
+    result = mmdagg_fn(X, Y, alpha=ALPHA, return_dictionary=True)
+    return {'decision': result, 'mode': 'aggregation'}
 
 
 # ======================================================================

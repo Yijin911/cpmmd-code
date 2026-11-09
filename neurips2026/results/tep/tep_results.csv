@@ -1,12 +1,12 @@
 experiment,fault_type,n_samples,method,metric,value,n_reps
 H0_none,none,200,CPMMD1+PermSplit2,type_I,0.06,50
-H0_none,none,200,Liu1+PermSplit2,type_I,0.06,50
+H0_none,none,200,Liu1+PermSplit2,type_I,0.04,50
 H0_none,none,200,Plain1+PermSplit2,type_I,0.02,50
 H0_none,none,200,Median+Perm,type_I,0.08,50
 H0_none,none,200,MMDAgg+Perm,type_I,0.06,50
 H0_none,none,200,Lap+poly2,type_I,0.0,50
 H1_fault3,fault3,200,CPMMD1+PermSplit2,power,0.06,50
-H1_fault3,fault3,200,Liu1+PermSplit2,power,0.08,50
+H1_fault3,fault3,200,Liu1+PermSplit2,power,0.04,50
 H1_fault3,fault3,200,Plain1+PermSplit2,power,0.06,50
 H1_fault3,fault3,200,Median+Perm,power,0.02,50
 H1_fault3,fault3,200,MMDAgg+Perm,power,0.14,50
@@ -18,7 +18,7 @@ H1_fault9,fault9,200,Median+Perm,power,0.1,50
 H1_fault9,fault9,200,MMDAgg+Perm,power,0.18,50
 H1_fault9,fault9,200,Lap+poly2,power,0.02,50
 H1_fault15,fault15,200,CPMMD1+PermSplit2,power,0.08,50
-H1_fault15,fault15,200,Liu1+PermSplit2,power,0.08,50
+H1_fault15,fault15,200,Liu1+PermSplit2,power,0.12,50
 H1_fault15,fault15,200,Plain1+PermSplit2,power,0.04,50
 H1_fault15,fault15,200,Median+Perm,power,0.28,50
 H1_fault15,fault15,200,MMDAgg+Perm,power,0.78,50

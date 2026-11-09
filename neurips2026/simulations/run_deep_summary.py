@@ -17,7 +17,7 @@ import os, sys, time, csv, warnings
 import numpy as np
 import torch
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
+sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from run_cross_comparison import (

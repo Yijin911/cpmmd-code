@@ -1,0 +1,3 @@
+dim,n_samples,delta,criterion,rejection_rate,n_valid,time_s
+50,100,0.0,Liu,0.06,200,100.93447232246399
+50,100,0.5,Liu,0.265,200,103.46399188041687
