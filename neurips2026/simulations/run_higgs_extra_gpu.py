@@ -11,7 +11,16 @@ v2 changes vs run_higgs_extra_gpu.py:
         whether σ_sel hits the grid boundary (selection-saturation flag).
   - Sigma grids unchanged (linear [2,20], poly [10,100]); 24-point geometric.
 
-Usage: python run_higgs_extra_gpu_v2.py
+Camera-ready changes:
+  - Inputs are standardized on the pooled loaded rows, exactly as in run_higgs.py,
+    so every Higgs method in Fig. 3(a) sees the same features. The polynomial
+    ansatze use the 20 columns with the largest raw variance, fixed once.
+  - Each (n, method) has its own seed and each repetition passes its generator to
+    the split, the calibration and the permutation test, so runs are reproducible
+    and METHODS can be split across processes without changing the numbers.
+  - MODES (default permsplit) selects the protocol; the paper uses permsplit.
+
+Usage: [MODES=permsplit] [METHODS=CPMMD-poly3] [OUT_SUFFIX=_poly3] python run_higgs_extra_gpu.py
 """
 from __future__ import annotations
 import os
@@ -41,9 +50,13 @@ SAMPLE_SIZES = [200, 500]
 MAX_ROWS = 100000
 SEED = 42
 N_DIAG_REPS = 5  # log diagnostics for first 5 H1 reps per method
+MODES = os.environ.get('MODES', 'permsplit').split(',')
+METHODS = [m for m in os.environ.get('METHODS', '').split(',') if m]
+OUT_SUFFIX = os.environ.get('OUT_SUFFIX', '')
+VAR_IDX = None  # columns of the polynomial ansatze, set in main()
 
-LOG_PATH = os.path.join(RESULTS_DIR, 'run_log_gpu.txt')
-DIAG_PATH = os.path.join(RESULTS_DIR, 'diagnostics.csv')
+LOG_PATH = os.path.join(RESULTS_DIR, f'run_log_gpu{OUT_SUFFIX}.txt')
+DIAG_PATH = os.path.join(RESULTS_DIR, f'diagnostics{OUT_SUFFIX}.csv')
 
 
 def log(msg):
@@ -223,9 +236,9 @@ def perm_test_torch(X, Y, kernel_fn, sigma, n_perm=N_PERM, rng=None):
 # Method drivers
 # ----------------------------------------------------------------------
 def run_linear(X_np, Y_np, sigma_grid, mode='permsplit', diag_writer=None,
-               method_label=None, hypothesis=None, rep=None, n_samples=None):
+               method_label=None, hypothesis=None, rep=None, n_samples=None, rng=None):
     """mode in {'permsplit', 'fullsample'}."""
-    rng = np.random.default_rng()
+    rng = rng if rng is not None else np.random.default_rng()
     if mode == 'permsplit':
         n = X_np.shape[0]
         half = n // 2
@@ -255,9 +268,9 @@ def run_linear(X_np, Y_np, sigma_grid, mode='permsplit', diag_writer=None,
 
 
 def run_poly(X_np, Y_np, sigma_grid, degree, mode='permsplit', diag_writer=None,
-             method_label=None, hypothesis=None, rep=None, n_samples=None):
+             method_label=None, hypothesis=None, rep=None, n_samples=None, rng=None):
     """degree in {2, 3}. Uses Laplacian kernel on standardised polynomial features."""
-    rng = np.random.default_rng()
+    rng = rng if rng is not None else np.random.default_rng()
     transform_fn = poly2_features_np if degree == 2 else poly3_features_np
 
     if mode == 'permsplit':
@@ -272,7 +285,7 @@ def run_poly(X_np, Y_np, sigma_grid, degree, mode='permsplit', diag_writer=None,
         Ytr_np = Yte_np = Y_np
 
     pool_tr = np.vstack([Xtr_np, Ytr_np])
-    var_idx = np.argsort(-pool_tr.var(axis=0))[:20]
+    var_idx = VAR_IDX if VAR_IDX is not None else np.argsort(-pool_tr.var(axis=0))[:20]
     Xtr_f = transform_fn(Xtr_np, var_idx); Ytr_f = transform_fn(Ytr_np, var_idx)
     Xte_f = transform_fn(Xte_np, var_idx); Yte_f = transform_fn(Yte_np, var_idx)
     pool_tr_f = np.vstack([Xtr_f, Ytr_f])
@@ -310,15 +323,19 @@ def main():
     log(f'=== Higgs extra GPU v2 ({DEVICE}) ===')
     log(f'N_REPS={N_REPS}, N_PERM={N_PERM}, N_CAL={N_CAL}, alpha={ALPHA}')
 
+    global VAR_IDX
     sig, bg = load_higgs()
-    sig = sig.astype(np.float32)
-    bg = bg.astype(np.float32)
-    rng_master = np.random.default_rng(SEED)
+    pooled = np.concatenate([bg, sig], axis=0)
+    VAR_IDX = np.argsort(-pooled.var(axis=0))[:20]   # 20 largest raw variances
+    mean, std = pooled.mean(axis=0), pooled.std(axis=0)
+    std[std < 1e-10] = 1.0
+    sig = ((sig - mean) / std).astype(np.float32)    # as run_higgs.load_higgs
+    bg = ((bg - mean) / std).astype(np.float32)
 
     sigma_lin = list(np.geomspace(2.0, 20.0, 24).astype(np.float32))
     sigma_poly = list(np.geomspace(10.0, 100.0, 24).astype(np.float32))
 
-    out_path = os.path.join(RESULTS_DIR, 'higgs_extra_v2_results.csv')
+    out_path = os.path.join(RESULTS_DIR, f'higgs_extra_v2_results{OUT_SUFFIX}.csv')
     rows = [['experiment', 'n_samples', 'method', 'mode', 'metric', 'value', 'n_reps']]
 
     diag_file = open(DIAG_PATH, 'w', newline='')
@@ -328,23 +345,26 @@ def main():
                           'boundary_hit'])
 
     methods = [
-        ('CPMMD-linear', 'permsplit', lambda X, Y, dw, hyp, r, n: run_linear(
-            X, Y, sigma_lin, 'permsplit', dw, 'CPMMD-linear', hyp, r, n)),
-        ('CPMMD-linear', 'fullsample', lambda X, Y, dw, hyp, r, n: run_linear(
-            X, Y, sigma_lin, 'fullsample', dw, 'CPMMD-linear', hyp, r, n)),
-        ('CPMMD-poly2', 'permsplit', lambda X, Y, dw, hyp, r, n: run_poly(
-            X, Y, sigma_poly, 2, 'permsplit', dw, 'CPMMD-poly2', hyp, r, n)),
-        ('CPMMD-poly2', 'fullsample', lambda X, Y, dw, hyp, r, n: run_poly(
-            X, Y, sigma_poly, 2, 'fullsample', dw, 'CPMMD-poly2', hyp, r, n)),
-        ('CPMMD-poly3', 'permsplit', lambda X, Y, dw, hyp, r, n: run_poly(
-            X, Y, sigma_poly, 3, 'permsplit', dw, 'CPMMD-poly3', hyp, r, n)),
-        ('CPMMD-poly3', 'fullsample', lambda X, Y, dw, hyp, r, n: run_poly(
-            X, Y, sigma_poly, 3, 'fullsample', dw, 'CPMMD-poly3', hyp, r, n)),
+        ('CPMMD-linear', 'permsplit', lambda X, Y, dw, hyp, r, n, g: run_linear(
+            X, Y, sigma_lin, 'permsplit', dw, 'CPMMD-linear', hyp, r, n, g)),
+        ('CPMMD-linear', 'fullsample', lambda X, Y, dw, hyp, r, n, g: run_linear(
+            X, Y, sigma_lin, 'fullsample', dw, 'CPMMD-linear', hyp, r, n, g)),
+        ('CPMMD-poly2', 'permsplit', lambda X, Y, dw, hyp, r, n, g: run_poly(
+            X, Y, sigma_poly, 2, 'permsplit', dw, 'CPMMD-poly2', hyp, r, n, g)),
+        ('CPMMD-poly2', 'fullsample', lambda X, Y, dw, hyp, r, n, g: run_poly(
+            X, Y, sigma_poly, 2, 'fullsample', dw, 'CPMMD-poly2', hyp, r, n, g)),
+        ('CPMMD-poly3', 'permsplit', lambda X, Y, dw, hyp, r, n, g: run_poly(
+            X, Y, sigma_poly, 3, 'permsplit', dw, 'CPMMD-poly3', hyp, r, n, g)),
+        ('CPMMD-poly3', 'fullsample', lambda X, Y, dw, hyp, r, n, g: run_poly(
+            X, Y, sigma_poly, 3, 'fullsample', dw, 'CPMMD-poly3', hyp, r, n, g)),
     ]
 
     for n in SAMPLE_SIZES:
         log(f'\n--- n = {n} ---')
-        for method, mode, fn in methods:
+        for mi, (method, mode, fn) in enumerate(methods):
+            if mode not in MODES or (METHODS and method not in METHODS):
+                continue
+            rng_master = np.random.default_rng([SEED, n, mi])
             label = f'{method}-{mode}'
             t0 = time.time()
             decisions = []
@@ -353,7 +373,7 @@ def main():
                 idx = rng.choice(len(bg), 2 * n, replace=False)
                 X = bg[idx[:n]]
                 Y = bg[idx[n:]]
-                decisions.append(fn(X, Y, diag_writer, 'H0', r, n))
+                decisions.append(fn(X, Y, diag_writer, 'H0', r, n, rng))
             type_i = float(np.mean(decisions))
             log(f'  {label} TypeI@n={n}: {type_i:.3f}  ({time.time() - t0:.1f}s)')
             rows.append(['H0_Higgs', n, method, mode, 'type_I', type_i, N_REPS])
@@ -366,7 +386,7 @@ def main():
                 idx_y = rng.choice(len(bg), n, replace=False)
                 X = sig[idx_x]
                 Y = bg[idx_y]
-                decisions.append(fn(X, Y, diag_writer, 'H1', r, n))
+                decisions.append(fn(X, Y, diag_writer, 'H1', r, n, rng))
             power = float(np.mean(decisions))
             log(f'  {label} Power@n={n}: {power:.3f}  ({time.time() - t0:.1f}s)')
             rows.append(['H1_Higgs', n, method, mode, 'power', power, N_REPS])
