@@ -1,0 +1,16 @@
+df,hypothesis,method,rate,n_valid,n_reps
+None,H0,Median,0.09,200,200
+None,H0,CP-MMD (Lap+poly4),0.06,200,200
+None,H0,MMDAgg,0.04,200,200
+5,H1,Median,1.0,200,200
+5,H1,CP-MMD (Lap+poly4),1.0,200,200
+5,H1,MMDAgg,1.0,200,200
+8,H1,Median,0.455,200,200
+8,H1,CP-MMD (Lap+poly4),1.0,200,200
+8,H1,MMDAgg,1.0,200,200
+12,H1,Median,0.19,200,200
+12,H1,CP-MMD (Lap+poly4),0.965,200,200
+12,H1,MMDAgg,0.96,200,200
+20,H1,Median,0.05,200,200
+20,H1,CP-MMD (Lap+poly4),0.6,200,200
+20,H1,MMDAgg,0.37,200,200

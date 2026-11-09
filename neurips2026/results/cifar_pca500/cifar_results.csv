@@ -1,0 +1,13 @@
+experiment,n_samples,method,metric,value,n_reps
+H1_CIFAR10,200,CPMMD1+PermSplit2,power,1.0,50
+H1_CIFAR10,200,Liu1+PermSplit2,power,1.0,50
+H1_CIFAR10,200,Plain1+PermSplit2,power,1.0,50
+H1_CIFAR10,200,Median+Perm,power,1.0,50
+H1_CIFAR10,200,MMDAgg+Perm,power,1.0,50
+H1_CIFAR10,200,MMDFUSE+Perm,power,1.0,50
+H0_CIFAR10,200,CPMMD1+PermSplit2,type_I,0.08,50
+H0_CIFAR10,200,Liu1+PermSplit2,type_I,0.04,50
+H0_CIFAR10,200,Plain1+PermSplit2,type_I,0.1,50
+H0_CIFAR10,200,Median+Perm,type_I,0.0,50
+H0_CIFAR10,200,MMDAgg+Perm,type_I,0.02,50
+H0_CIFAR10,200,MMDFUSE+Perm,type_I,0.02,50

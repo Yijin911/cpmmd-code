@@ -7,9 +7,14 @@ $\widetilde G_T(h_\sigma)=L(h_\sigma)\,\lVert\mathbf D\rVert_F/N$ inside the
 $\sigma$-selection objective and compares the **shared-denominator** and
 **per-permutation** calibration procedures.
 
+**NeurIPS 2026 paper.** The code and results for the conference paper *Kernel
+Selection is Model Selection: A Unified Complexity-Penalized Approach for MMD
+Two-Sample Tests* (Ni and Huo, NeurIPS 2026) are in [`neurips2026/`](neurips2026/),
+which has its own README.
+
 This repository is self-contained: it carries both the journal version's new
 diagnostics and the benchmark experiments reproduced from the conference
-companion (Ni and Huo, under review, arXiv:2605.06883), so every empirical
+companion (Ni and Huo, NeurIPS 2026, arXiv:2605.06883), so every empirical
 claim in the paper can be traced to a script here.
 
 ## Setup
@@ -96,14 +101,14 @@ requirements.txt
   note    = {Submitted.}
 }
 
-@misc{ni2026cpmmd-conf,
-  title         = {Kernel Selection is Model Selection: A Unified Complexity-Penalised Approach for {MMD} Two-Sample Tests},
+@inproceedings{ni2026cpmmd-conf,
+  title         = {Kernel Selection is Model Selection: A Unified Complexity-Penalized Approach for {MMD} Two-Sample Tests},
   author        = {Ni, Yijin and Huo, Xiaoming},
+  booktitle     = {Advances in Neural Information Processing Systems},
   year          = {2026},
   eprint        = {2605.06883},
   archivePrefix = {arXiv},
-  primaryClass  = {stat.ML},
-  note          = {Under review}
+  primaryClass  = {stat.ML}
 }
 ```
 
